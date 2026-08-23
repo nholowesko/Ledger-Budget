@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Ledger — Budget Tracker</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Ledger" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    --paper: #E7EFE4;
+    --card: #F4F8F1;
+    --ink: #1F2E22;
+    --ink-soft: #4B5B4C;
+    --rule: #B9CBB3;
+    --green: #2F5233;
+    --red: #A22C2C;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+  }
+  .app {
+    min-height: 100vh;
+    max-width: 480px;
+    margin: 0 auto;
+    padding-bottom: 84px;
+    position: relative;
+  }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+  .serif { font-family: 'Fraunces', serif; }
+
+  .topbar {
+    padding: 22px 20px 14px;
+    border-bottom: 1px solid var(--rule);
+    background: repeating-linear-gradient(var(--paper), var(--paper) 27px, var(--rule) 28px);
+  }
+  .brand {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 26px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .brand small {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .month-switch { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .month-switch .label { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 15px; letter-spacing: 0.5px; }
+  .icon-btn {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 6px;
+    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    color: var(--ink); cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 16px; font-weight: 600;
+  }
+  .icon-btn:active { transform: translateY(1px); }
+
+  .totals-row { display: flex; gap: 10px; padding: 14px 20px 4px; }
+  .total-card { flex: 1; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; }
+  .total-card .k { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; }
+  .total-card .v { font-family: 'Fraunces', serif; font-weight: 600; font-size: 21px; margin-top: 2px; }
+  .total-card .v.red { color: var(--red); }
+
+  .section-title { padding: 18px 20px 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--ink-soft); }
+
+  .cat-list { padding: 4px 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .cat-card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; }
+  .cat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .cat-name { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
+  .cat-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .cat-amounts { font-family: 'IBM Plex Mono', monospace; font-size: 13px; text-align: right; }
+  .cat-amounts .over { color: var(--red); font-weight: 600; }
+
+  .ruler-track { position: relative; height: 14px; background: #DCE6D8; border-radius: 3px; overflow: hidden; border: 1px solid var(--rule); }
+  .ruler-fill { height: 100%; border-radius: 2px; transition: width 0.25s ease; }
+  .ruler-ticks { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent, transparent 9%, rgba(31,46,34,0.18) 9%, rgba(31,46,34,0.18) calc(9% + 1px)); pointer-events: none; }
+  .cat-foot { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; }
+
+  .tabbar {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: 480px; background: var(--card); border-top: 1px solid var(--rule);
+    display: flex; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); gap: 6px;
+  }
+  .tab-btn {
+    flex: 1; border: none; background: transparent; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 6px 0; color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.5px; border-radius: 8px; cursor: pointer;
+  }
+  .tab-btn .glyph { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; }
+  .tab-btn.active { color: var(--green); background: #DCE6D8; }
+
+  .panel { padding: 8px 20px 20px; }
+  .form-card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--ink-soft); margin-bottom: 5px; font-family: 'IBM Plex Mono', monospace; }
+  .field select, .field input { width: 100%; padding: 9px 10px; border: 1px solid var(--rule); border-radius: 7px; background: #fff; font-family: 'Inter', sans-serif; font-size: 15px; color: var(--ink); }
+  .field input.mono-input { font-family: 'IBM Plex Mono', monospace; }
+  .btn { width: 100%; padding: 11px; border-radius: 8px; border: none; background: var(--green); color: #F4F8F1; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+  .btn:active { transform: translateY(1px); }
+  .btn.secondary { background: var(--card); color: var(--green); border: 1px solid var(--green); }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .btn { flex: 1; }
+
+  .expense-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+  .expense-row:last-child { border-bottom: none; }
+  .expense-main { display: flex; flex-direction: column; }
+  .expense-desc { font-size: 14px; font-weight: 500; }
+  .expense-meta { font-size: 11px; color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; margin-top: 2px; }
+  .expense-amt { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; margin-right: 10px; }
+  .del-btn { background: none; border: none; color: #9a7b6f; cursor: pointer; padding: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 16px; }
+
+  .allocate-card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+  .allocate-head { display: flex; align-items: center; gap: 8px; font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; margin-bottom: 10px; }
+  .allocate-summary { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--rule); display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+  .allocate-summary .neg { color: var(--red); font-weight: 600; }
+
+  .goal-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+  .goal-row:last-child { border-bottom: none; }
+  .goal-row .gname { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+  .goal-row input { width: 92px; padding: 7px 8px; border: 1px solid var(--rule); border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 14px; text-align: right; background: #fff; color: var(--ink); }
+  .empty-note { text-align: center; color: var(--ink-soft); font-size: 13px; padding: 24px 10px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo } = React;
+
+// ---------- constants ----------
+const CATS = [
+  { id: "dining", name: "Dining", color: "#5B7B4F", goal: 350 },
+  { id: "groceries", name: "Groceries", color: "#35604A", goal: 300 },
+  { id: "gas", name: "Gas", color: "#7A6A3D", goal: 45 },
+  { id: "gifts", name: "Gifts", color: "#8B5A3A", goal: 150 },
+  { id: "fun", name: "Fun", color: "#3D6B6B", goal: 80 },
+  { id: "personal", name: "Personal", color: "#5F5A3D", goal: 140 },
+  { id: "other", name: "Other", color: "#6B6B5B", goal: 25 },
+];
+
+const SEED_EXPENSES = [
+  { id: "e1", cat: "dining", date: "2026-01-13", desc: "New Hart. Diner", amt: 38.35 },
+  { id: "e2", cat: "dining", date: "2026-01-21", desc: "Molto TO", amt: 68.55 },
+  { id: "e3", cat: "dining", date: "2026-01-30", desc: "Senor Salsa", amt: 37.26 },
+  { id: "e4", cat: "dining", date: "2026-02-09", desc: "Italian Kitchen", amt: 26.65 },
+  { id: "e5", cat: "dining", date: "2026-02-16", desc: "T-Swirl Crepe", amt: 32.14 },
+  { id: "e6", cat: "dining", date: "2026-02-16", desc: "Molto TO", amt: 67.47 },
+  { id: "e7", cat: "dining", date: "2026-02-21", desc: "Sophie's Kitchen", amt: 81.31 },
+  { id: "e8", cat: "groceries", date: "2026-01-20", desc: "CC + S&S", amt: 117.6 },
+  { id: "e9", cat: "groceries", date: "2026-01-31", desc: "S&S", amt: 48.28 },
+  { id: "e10", cat: "groceries", date: "2026-02-07", desc: "S&S", amt: 137.51 },
+  { id: "e11", cat: "gas", date: "2026-01-15", desc: "Fill up", amt: 37.66 },
+  { id: "e12", cat: "gifts", date: "2026-01-13", desc: "Secret Santa", amt: 17.51 },
+  { id: "e13", cat: "gifts", date: "2026-02-12", desc: "Isabelle B-Day", amt: 132.94 },
+  { id: "e14", cat: "gifts", date: "2026-02-16", desc: "Valentine's Day", amt: 82.9 },
+  { id: "e15", cat: "fun", date: "2026-01-19", desc: "Dunkin'", amt: 10.81 },
+  { id: "e16", cat: "fun", date: "2026-01-21", desc: "Boba", amt: 13.85 },
+  { id: "e17", cat: "fun", date: "2026-02-07", desc: "Boba", amt: 15.85 },
+  { id: "e18", cat: "fun", date: "2026-02-09", desc: "Gelato", amt: 22.2 },
+  { id: "e19", cat: "fun", date: "2026-02-25", desc: "Dunkin'", amt: 21.41 },
+  { id: "e20", cat: "personal", date: "2026-01-06", desc: "Haircut", amt: 41 },
+  { id: "e21", cat: "personal", date: "2026-01-14", desc: "Car wash", amt: 21 },
+  { id: "e22", cat: "personal", date: "2026-01-14", desc: "Stylus for iPad", amt: 42.53 },
+  { id: "e23", cat: "personal", date: "2026-02-19", desc: "Haircut", amt: 42 },
+  { id: "e24", cat: "other", date: "2026-02-16", desc: "CVS", amt: 17.54 },
+];
+
+const STORAGE_KEY = "ledger-budget-data-v1";
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const money = (n) => (Math.round((n + Number.EPSILON) * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+function RulerBar({ pct, over }) {
+  const clamped = Math.min(pct, 100);
+  return (
+    <div className="ruler-track">
+      <div className="ruler-fill" style={{ width: `${clamped}%`, background: over ? "#A22C2C" : "#2F5233" }} />
+      <div className="ruler-ticks" />
+    </div>
+  );
+}
+
+function App() {
+  const [categories, setCategories] = useState(CATS);
+  const [expenses, setExpenses] = useState(SEED_EXPENSES);
+  const [loaded, setLoaded] = useState(false);
+  const [tab, setTab] = useState("overview");
+
+  const now = new Date();
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth());
+
+  // ---------- load persisted data (localStorage) ----------
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.categories) setCategories(parsed.categories);
+        if (parsed.expenses) setExpenses(parsed.expenses);
+      }
+    } catch (e) {
+      // ignore — keep seed defaults
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  // ---------- persist on change ----------
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ categories, expenses }));
+    } catch (e) {
+      // storage full or unavailable — ignore
+    }
+  }, [categories, expenses, loaded]);
+
+  const monthKey = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}`;
+  const monthExpenses = useMemo(() => expenses.filter((e) => e.date.startsWith(monthKey)), [expenses, monthKey]);
+
+  const spentByCat = useMemo(() => {
+    const map = {};
+    for (const c of categories) map[c.id] = 0;
+    for (const e of monthExpenses) map[e.cat] = (map[e.cat] || 0) + e.amt;
+    return map;
+  }, [categories, monthExpenses]);
+
+  const totalGoal = categories.reduce((s, c) => s + c.goal, 0);
+  const totalSpent = Object.values(spentByCat).reduce((s, n) => s + n, 0);
+
+  function shiftMonth(delta) {
+    let m = viewMonth + delta;
+    let y = viewYear;
+    if (m < 0) { m = 11; y -= 1; }
+    if (m > 11) { m = 0; y += 1; }
+    setViewMonth(m);
+    setViewYear(y);
+  }
+
+  function addExpense(exp) { setExpenses((prev) => [{ id: uid(), ...exp }, ...prev]); }
+  function deleteExpense(id) { setExpenses((prev) => prev.filter((e) => e.id !== id)); }
+  function updateGoal(id, goal) { setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, goal } : c))); }
+  function setAllGoals(nextGoals) { setCategories((prev) => prev.map((c) => ({ ...c, goal: nextGoals[c.id] ?? c.goal }))); }
+
+  return (
+    <div className="app">
+      <div className="topbar">
+        <div className="brand">Ledger <small>a spending &amp; goals tracker</small></div>
+        <div className="month-switch">
+          <button className="icon-btn" onClick={() => shiftMonth(-1)} aria-label="Previous month">‹</button>
+          <span className="label">{MONTHS[viewMonth]} {viewYear}</span>
+          <button className="icon-btn" onClick={() => shiftMonth(1)} aria-label="Next month">›</button>
+        </div>
+      </div>
+
+      {tab === "overview" && (
+        <>
+          <div className="totals-row">
+            <div className="total-card">
+              <div className="k">Spent</div>
+              <div className={`v ${totalSpent > totalGoal ? "red" : ""}`}>${money(totalSpent)}</div>
+            </div>
+            <div className="total-card">
+              <div className="k">Goal</div>
+              <div className="v">${money(totalGoal)}</div>
+            </div>
+            <div className="total-card">
+              <div className="k">{totalGoal - totalSpent >= 0 ? "Left" : "Over"}</div>
+              <div className={`v ${totalGoal - totalSpent < 0 ? "red" : ""}`}>${money(Math.abs(totalGoal - totalSpent))}</div>
+            </div>
+          </div>
+
+          <div className="section-title">Categories this month</div>
+          <div className="cat-list">
+            {categories.map((c) => {
+              const spent = spentByCat[c.id] || 0;
+              const pct = c.goal > 0 ? (spent / c.goal) * 100 : spent > 0 ? 100 : 0;
+              const over = spent > c.goal;
+              return (
+                <div className="cat-card" key={c.id}>
+                  <div className="cat-top">
+                    <div className="cat-name"><span className="cat-dot" style={{ background: c.color }} />{c.name}</div>
+                    <div className="cat-amounts"><span className={over ? "over" : ""}>${money(spent)}</span> / ${money(c.goal)}</div>
+                  </div>
+                  <RulerBar pct={pct} over={over} />
+                  <div className="cat-foot">
+                    <span>{pct.toFixed(0)}% of goal</span>
+                    <span className={over ? "over" : ""}>{over ? `$${money(spent - c.goal)} over` : `$${money(c.goal - spent)} left`}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {tab === "log" && (
+        <LogPanel categories={categories} monthExpenses={monthExpenses} onAdd={addExpense} onDelete={deleteExpense} viewYear={viewYear} viewMonth={viewMonth} />
+      )}
+
+      {tab === "goals" && (
+        <GoalsPanel categories={categories} onUpdateGoal={updateGoal} onSetAll={setAllGoals} totalGoal={totalGoal} />
+      )}
+
+      <div className="tabbar">
+        <button className={`tab-btn ${tab === "overview" ? "active" : ""}`} onClick={() => setTab("overview")}>
+          <span className="glyph">§</span> Overview
+        </button>
+        <button className={`tab-btn ${tab === "log" ? "active" : ""}`} onClick={() => setTab("log")}>
+          <span className="glyph">+</span> Log
+        </button>
+        <button className={`tab-btn ${tab === "goals" ? "active" : ""}`} onClick={() => setTab("goals")}>
+          <span className="glyph">◎</span> Goals
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function LogPanel({ categories, monthExpenses, onAdd, onDelete, viewYear, viewMonth }) {
+  const defaultDate = useMemo(() => {
+    const d = new Date();
+    if (d.getFullYear() === viewYear && d.getMonth() === viewMonth) return d.toISOString().slice(0, 10);
+    return `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-01`;
+  }, [viewYear, viewMonth]);
+
+  const [cat, setCat] = useState(categories[0]?.id || "");
+  const [desc, setDesc] = useState("");
+  const [amt, setAmt] = useState("");
+  const [date, setDate] = useState(defaultDate);
+
+  useEffect(() => setDate(defaultDate), [defaultDate]);
+
+  function submit(e) {
+    e.preventDefault();
+    const n = parseFloat(amt);
+    if (!n || n <= 0 || !cat || !date) return;
+    onAdd({ cat, desc: desc.trim() || "Untitled", amt: Math.round(n * 100) / 100, date });
+    setDesc(""); setAmt("");
+  }
+
+  const sorted = [...monthExpenses].sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  return (
+    <div className="panel">
+      <div className="section-title" style={{ padding: "0 0 8px" }}>Log an expense</div>
+      <form className="form-card" onSubmit={submit}>
+        <div className="field">
+          <label>Category</label>
+          <select value={cat} onChange={(e) => setCat(e.target.value)}>
+            {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+          </select>
+        </div>
+        <div className="field">
+          <label>What</label>
+          <input type="text" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="e.g. Groceries run" />
+        </div>
+        <div className="btn-row">
+          <div className="field" style={{ flex: 1 }}>
+            <label>Amount</label>
+            <input className="mono-input" type="number" step="0.01" min="0" value={amt} onChange={(e) => setAmt(e.target.value)} placeholder="0.00" />
+          </div>
+          <div className="field" style={{ flex: 1 }}>
+            <label>Date</label>
+            <input className="mono-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+        </div>
+        <button className="btn" type="submit">+ Add expense</button>
+      </form>
+
+      <div className="section-title" style={{ padding: "18px 0 4px" }}>This month's entries</div>
+      <div className="form-card">
+        {sorted.length === 0 && <div className="empty-note">Nothing logged for this month yet.</div>}
+        {sorted.map((e) => {
+          const c = categories.find((x) => x.id === e.cat);
+          return (
+            <div className="expense-row" key={e.id}>
+              <div className="expense-main">
+                <span className="expense-desc">{e.desc}</span>
+                <span className="expense-meta">{e.date} · {c ? c.name : "—"}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <span className="expense-amt">${money(e.amt)}</span>
+                <button className="del-btn" onClick={() => onDelete(e.id)} aria-label="Delete">×</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function GoalsPanel({ categories, onUpdateGoal, onSetAll, totalGoal }) {
+  const [pool, setPool] = useState("");
+  const [draft, setDraft] = useState(() => Object.fromEntries(categories.map((c) => [c.id, c.goal])));
+
+  useEffect(() => { setDraft(Object.fromEntries(categories.map((c) => [c.id, c.goal]))); }, [categories]);
+
+  const draftTotal = Object.values(draft).reduce((s, n) => s + (parseFloat(n) || 0), 0);
+  const poolNum = parseFloat(pool) || 0;
+  const remaining = poolNum - draftTotal;
+
+  function applyDraft() {
+    const clean = {};
+    for (const k of Object.keys(draft)) clean[k] = Math.max(0, parseFloat(draft[k]) || 0);
+    onSetAll(clean);
+  }
+
+  function splitEvenly() {
+    if (poolNum <= 0) return;
+    const each = Math.floor((poolNum / categories.length) * 100) / 100;
+    const next = {};
+    categories.forEach((c, i) => {
+      next[c.id] = i === categories.length - 1 ? Math.round((poolNum - each * (categories.length - 1)) * 100) / 100 : each;
+    });
+    setDraft(next);
+  }
+
+  function splitByCurrentRatio() {
+    if (poolNum <= 0) return;
+    const currentTotal = categories.reduce((s, c) => s + c.goal, 0);
+    if (currentTotal <= 0) { splitEvenly(); return; }
+    const next = {};
+    let running = 0;
+    categories.forEach((c, i) => {
+      if (i === categories.length - 1) {
+        next[c.id] = Math.round((poolNum - running) * 100) / 100;
+      } else {
+        const v = Math.round(((c.goal / currentTotal) * poolNum) * 100) / 100;
+        next[c.id] = v; running += v;
+      }
+    });
+    setDraft(next);
+  }
+
+  return (
+    <div className="panel">
+      <div className="allocate-card">
+        <div className="allocate-head">⚖ Divide money among goals</div>
+        <div className="field">
+          <label>Money to divide</label>
+          <input className="mono-input" type="number" step="0.01" min="0" value={pool} onChange={(e) => setPool(e.target.value)} placeholder="e.g. 1100" />
+        </div>
+        <div className="btn-row">
+          <button className="btn secondary" type="button" onClick={splitEvenly}>Split evenly</button>
+          <button className="btn secondary" type="button" onClick={splitByCurrentRatio}>Match current ratios</button>
+        </div>
+        <div className="allocate-summary">
+          <span>Allocated: ${money(draftTotal)}</span>
+          <span className={remaining < 0 ? "neg" : ""}>
+            {pool === "" ? "Enter an amount above" : `${remaining >= 0 ? "Unallocated" : "Over by"}: $${money(Math.abs(remaining))}`}
+          </span>
+        </div>
+      </div>
+
+      <div className="section-title" style={{ padding: "0 0 4px" }}>Monthly goal per category</div>
+      <div className="form-card">
+        {categories.map((c) => (
+          <div className="goal-row" key={c.id}>
+            <span className="gname"><span className="cat-dot" style={{ background: c.color }} />{c.name}</span>
+            <input className="mono-input" type="number" step="0.01" min="0" value={draft[c.id]} onChange={(e) => setDraft((d) => ({ ...d, [c.id]: e.target.value }))} />
+          </div>
+        ))}
+      </div>
+
+      <button className="btn" style={{ marginTop: 14 }} onClick={applyDraft}>✓ Save goals (total ${money(draftTotal)})</button>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
