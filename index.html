@@ -78,8 +78,29 @@
   .goal-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--rule); }
   .goal-row:last-child { border-bottom: none; }
   .goal-row .gname { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
-  .goal-row input { width: 92px; padding: 7px 8px; border: 1px solid var(--rule); border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 14px; text-align: right; background: #fff; color: var(--ink); }
+  .goal-row input { width: 72px; padding: 7px 8px; border: 1px solid var(--rule); border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 14px; text-align: right; background: #fff; color: var(--ink); }
   .empty-note { text-align: center; color: var(--ink-soft); font-size: 13px; padding: 24px 10px; }
+  .goal-row .cname-input { flex: 1; width: auto; min-width: 0; padding: 7px 8px; border: 1px solid var(--rule); border-radius: 6px; font-family: 'Inter', system-ui, sans-serif; font-size: 14px; font-weight: 500; background: #fff; color: var(--ink); }
+  .goal-row .del-cat { background: none; border: none; color: #9a7b6f; cursor: pointer; padding: 2px 4px; font-family: 'IBM Plex Mono', monospace; font-size: 16px; }
+  .add-cat-row { display: flex; gap: 8px; padding-top: 10px; margin-top: 6px; border-top: 1px dashed var(--rule); }
+  .add-cat-row input[type="text"] { flex: 2; }
+  .add-cat-row input[type="number"] { flex: 1; }
+  .add-cat-row input { padding: 8px 9px; border: 1px solid var(--rule); border-radius: 6px; font-size: 14px; background: #fff; color: var(--ink); }
+  .add-cat-btn { background: var(--green); color: #F4F8F1; border: none; border-radius: 6px; width: 38px; font-size: 18px; font-weight: 700; cursor: pointer; }
+  .year-total { padding: 14px 20px 4px; }
+  .chart-card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 10px 14px; margin: 4px 20px 14px; }
+  .chart-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 4px; padding: 0 4px; }
+  .bar-col { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; flex: 1; }
+  .bar-wrap { width: 100%; max-width: 26px; height: 140px; display: flex; flex-direction: column-reverse; border-bottom: 1px solid var(--rule); }
+  .bar-seg { width: 100%; }
+  .bar-month-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-soft); }
+  .bar-col.selected .bar-month-label { color: var(--green); font-weight: 700; }
+  .bar-col.selected .bar-wrap { border-bottom: 2px solid var(--green); }
+  .detail-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-row .dname { display: flex; align-items: center; gap: 8px; }
+  .detail-row .damt { font-family: 'IBM Plex Mono', monospace; font-weight: 500; }
+  .detail-total { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -129,6 +150,10 @@
 
   var STORAGE_KEY = "ledger-budget-data-v1";
   var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var PALETTE = ["#5B7B4F","#35604A","#7A6A3D","#8B5A3A","#3D6B6B","#5F5A3D","#6B6B5B","#4A6B5B","#6B5A5A","#4D5A7A","#7A6B5F","#5A6B3D"];
+  var UNCAT_COLOR = "#9a978c";
+  var CHART_H = 140;
 
   function money(n) {
     return (Math.round((n + Number.EPSILON) * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -147,7 +172,9 @@
     expenses: JSON.parse(JSON.stringify(SEED_EXPENSES)),
     tab: "overview",
     viewYear: now.getFullYear(),
-    viewMonth: now.getMonth()
+    viewMonth: now.getMonth(),
+    chartYear: now.getFullYear(),
+    yearSelectedMonth: now.getMonth()
   };
 
   try {
@@ -179,29 +206,69 @@
     return map;
   }
 
+  function categoryFor(catId) {
+    return state.categories.filter(function (c) { return c.id === catId; })[0];
+  }
+
+  function uncategorizedTotal(list) {
+    return list.reduce(function (s, e) { return categoryFor(e.cat) ? s : s + e.amt; }, 0);
+  }
+
+  // returns { totals: [12 numbers], breakdowns: [12 maps of catId/"_uncat" -> amt] }
+  function yearData(year) {
+    var totals = new Array(12).fill(0);
+    var breakdowns = [];
+    for (var i = 0; i < 12; i++) breakdowns.push({});
+    state.expenses.forEach(function (e) {
+      if (e.date.indexOf(String(year) + "-") !== 0) return;
+      var m = parseInt(e.date.slice(5, 7), 10) - 1;
+      if (m < 0 || m > 11) return;
+      totals[m] += e.amt;
+      var key = categoryFor(e.cat) ? e.cat : "_uncat";
+      breakdowns[m][key] = (breakdowns[m][key] || 0) + e.amt;
+    });
+    return { totals: totals, breakdowns: breakdowns };
+  }
+
   // ---------- rendering ----------
   function render() {
     var root = document.getElementById("root");
     var html = renderTopbar();
     if (state.tab === "overview") html += renderOverview();
     else if (state.tab === "log") html += renderLog();
+    else if (state.tab === "year") html += renderYear();
     else if (state.tab === "goals") html += renderGoals();
     html += renderTabbar();
     root.innerHTML = html;
     attachShellListeners();
     if (state.tab === "log") attachLogListeners();
+    if (state.tab === "year") attachYearListeners();
     if (state.tab === "goals") attachGoalsListeners();
   }
 
   function renderTopbar() {
-    return (
-      '<div class="topbar">' +
-        '<div class="brand">Ledger <small>a spending &amp; goals tracker</small></div>' +
+    var switcher;
+    if (state.tab === "year") {
+      switcher =
+        '<div class="month-switch">' +
+          '<button class="icon-btn" id="prevYear" aria-label="Previous year">&lsaquo;</button>' +
+          '<span class="label">' + state.chartYear + '</span>' +
+          '<button class="icon-btn" id="nextYear" aria-label="Next year">&rsaquo;</button>' +
+        '</div>';
+    } else if (state.tab === "goals") {
+      switcher = "";
+    } else {
+      switcher =
         '<div class="month-switch">' +
           '<button class="icon-btn" id="prevMonth" aria-label="Previous month">&lsaquo;</button>' +
           '<span class="label">' + MONTHS[state.viewMonth] + " " + state.viewYear + '</span>' +
           '<button class="icon-btn" id="nextMonth" aria-label="Next month">&rsaquo;</button>' +
-        '</div>' +
+        '</div>';
+    }
+    return (
+      '<div class="topbar">' +
+        '<div class="brand">Ledger <small>a spending &amp; goals tracker</small></div>' +
+        switcher +
       '</div>'
     );
   }
@@ -214,6 +281,7 @@
     return '<div class="tabbar">' +
       tabBtn("overview", "&sect;", "Overview") +
       tabBtn("log", "+", "Log") +
+      tabBtn("year", "Yr", "Year") +
       tabBtn("goals", "&#9678;", "Goals") +
       '</div>';
   }
@@ -223,6 +291,8 @@
     var totalGoal = state.categories.reduce(function (s, c) { return s + c.goal; }, 0);
     var totalSpent = 0;
     Object.keys(spent).forEach(function (k) { totalSpent += spent[k]; });
+    var uncat = uncategorizedTotal(monthExpenses());
+    totalSpent += uncat;
 
     var html =
       '<div class="totals-row">' +
@@ -250,6 +320,17 @@
           '</span></div>' +
         '</div>';
     });
+
+    if (uncat > 0) {
+      html +=
+        '<div class="cat-card">' +
+          '<div class="cat-top">' +
+            '<div class="cat-name"><span class="cat-dot" style="background:' + UNCAT_COLOR + '"></span>Uncategorized</div>' +
+            '<div class="cat-amounts">$' + money(uncat) + '</div>' +
+          '</div>' +
+          '<div class="cat-foot"><span>From deleted categories</span><span>no goal set</span></div>' +
+        '</div>';
+    }
 
     html += '</div>';
     return html;
@@ -288,7 +369,7 @@
         html +=
           '<div class="expense-row">' +
             '<div class="expense-main"><span class="expense-desc">' + esc(e.desc) + '</span>' +
-            '<span class="expense-meta">' + e.date + " &middot; " + (c ? esc(c.name) : "&mdash;") + '</span></div>' +
+            '<span class="expense-meta">' + e.date + " &middot; " + (c ? esc(c.name) : "Uncategorized") + '</span></div>' +
             '<div style="display:flex;align-items:center">' +
               '<span class="expense-amt">$' + money(e.amt) + '</span>' +
               '<button class="del-btn" data-del="' + e.id + '" aria-label="Delete">&times;</button>' +
@@ -320,19 +401,102 @@
     state.categories.forEach(function (c) {
       html +=
         '<div class="goal-row">' +
-          '<span class="gname"><span class="cat-dot" style="background:' + c.color + '"></span>' + esc(c.name) + '</span>' +
+          '<span class="cat-dot" style="background:' + c.color + '"></span>' +
+          '<input type="text" class="cname-input" data-name="' + c.id + '" value="' + esc(c.name) + '" />' +
           '<input class="mono-input" type="number" step="0.01" min="0" data-goal="' + c.id + '" value="' + c.goal + '" />' +
+          '<button class="del-cat" data-delcat="' + c.id + '" aria-label="Delete category">&times;</button>' +
         '</div>';
     });
+
+    html +=
+        '<div class="add-cat-row">' +
+          '<input type="text" id="newCatName" placeholder="New category name" />' +
+          '<input type="number" id="newCatGoal" placeholder="Goal" step="0.01" min="0" />' +
+          '<button class="add-cat-btn" id="addCatBtn" aria-label="Add category">+</button>' +
+        '</div>';
 
     html += '</div><button class="btn" id="saveGoals" style="margin-top:14px">&check; Save goals (total $' + money(totalGoal) + ')</button></div>';
     return html;
   }
 
+  function renderYear() {
+    var data = yearData(state.chartYear);
+    var totals = data.totals;
+    var breakdowns = data.breakdowns;
+    var yearTotal = totals.reduce(function (s, n) { return s + n; }, 0);
+    var maxVal = Math.max.apply(null, totals.concat([1]));
+
+    var html =
+      '<div class="year-total">' +
+        '<div class="total-card"><div class="k">Total spent in ' + state.chartYear + '</div><div class="v">$' + money(yearTotal) + '</div></div>' +
+      '</div>' +
+      '<div class="chart-card"><div class="chart-row">';
+
+    for (var i = 0; i < 12; i++) {
+      var total = totals[i];
+      var barH = maxVal > 0 ? Math.round((total / maxVal) * CHART_H) : 0;
+      var segs = "";
+      if (total > 0) {
+        state.categories.forEach(function (c) {
+          var amt = breakdowns[i][c.id] || 0;
+          if (amt > 0) {
+            var segH = Math.round((amt / total) * barH);
+            segs += '<div class="bar-seg" style="height:' + segH + 'px;background:' + c.color + '"></div>';
+          }
+        });
+        var uncatAmt = breakdowns[i]["_uncat"] || 0;
+        if (uncatAmt > 0) {
+          var uSegH = Math.round((uncatAmt / total) * barH);
+          segs += '<div class="bar-seg" style="height:' + uSegH + 'px;background:' + UNCAT_COLOR + '"></div>';
+        }
+      }
+      var selected = state.yearSelectedMonth === i ? "selected" : "";
+      html +=
+        '<div class="bar-col ' + selected + '" data-month="' + i + '">' +
+          '<div class="bar-wrap">' + segs + '</div>' +
+          '<span class="bar-month-label">' + MONTHS_SHORT[i] + '</span>' +
+        '</div>';
+    }
+
+    html += '</div></div>';
+
+    var sel = state.yearSelectedMonth;
+    html += '<div class="section-title" style="padding:0 20px 6px">' + MONTHS[sel] + " " + state.chartYear + ' breakdown</div>';
+    html += '<div class="panel" style="padding-top:0"><div class="form-card">';
+
+    var selBreakdown = breakdowns[sel];
+    var selTotal = totals[sel];
+    var rows = "";
+    state.categories.forEach(function (c) {
+      var amt = selBreakdown[c.id] || 0;
+      if (amt > 0) {
+        rows += '<div class="detail-row"><span class="dname"><span class="cat-dot" style="background:' + c.color + '"></span>' + esc(c.name) + '</span><span class="damt">$' + money(amt) + '</span></div>';
+      }
+    });
+    var uAmt = selBreakdown["_uncat"] || 0;
+    if (uAmt > 0) {
+      rows += '<div class="detail-row"><span class="dname"><span class="cat-dot" style="background:' + UNCAT_COLOR + '"></span>Uncategorized</span><span class="damt">$' + money(uAmt) + '</span></div>';
+    }
+    if (!rows) {
+      rows = '<div class="empty-note">No spending logged this month.</div>';
+    } else {
+      rows += '<div class="detail-row detail-total"><span>Total</span><span class="damt">$' + money(selTotal) + '</span></div>';
+    }
+    html += rows + '</div></div>';
+
+    return html;
+  }
+
   // ---------- event wiring ----------
   function attachShellListeners() {
-    document.getElementById("prevMonth").addEventListener("click", function () { shiftMonth(-1); });
-    document.getElementById("nextMonth").addEventListener("click", function () { shiftMonth(1); });
+    var prevMonth = document.getElementById("prevMonth");
+    var nextMonth = document.getElementById("nextMonth");
+    if (prevMonth) prevMonth.addEventListener("click", function () { shiftMonth(-1); });
+    if (nextMonth) nextMonth.addEventListener("click", function () { shiftMonth(1); });
+    var prevYear = document.getElementById("prevYear");
+    var nextYear = document.getElementById("nextYear");
+    if (prevYear) prevYear.addEventListener("click", function () { state.chartYear -= 1; render(); });
+    if (nextYear) nextYear.addEventListener("click", function () { state.chartYear += 1; render(); });
     var tabs = document.querySelectorAll("[data-tab]");
     for (var i = 0; i < tabs.length; i++) {
       tabs[i].addEventListener("click", function (e) {
@@ -372,9 +536,44 @@
     }
   }
 
+  function attachYearListeners() {
+    var cols = document.querySelectorAll("[data-month]");
+    cols.forEach(function (col) {
+      col.addEventListener("click", function (e) {
+        state.yearSelectedMonth = parseInt(e.currentTarget.getAttribute("data-month"), 10);
+        render();
+      });
+    });
+  }
+
   function attachGoalsListeners() {
     var poolInput = document.getElementById("poolInput");
     var goalInputs = document.querySelectorAll("[data-goal]");
+    var nameInputs = document.querySelectorAll("[data-name]");
+
+    document.querySelectorAll("[data-delcat]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        var catId = e.currentTarget.getAttribute("data-delcat");
+        var cat = categoryFor(catId);
+        var label = cat ? cat.name : "this category";
+        if (!confirm('Delete "' + label + '"? Its past expenses will move to Uncategorized.')) return;
+        state.categories = state.categories.filter(function (c) { return c.id !== catId; });
+        save();
+        render();
+      });
+    });
+
+    document.getElementById("addCatBtn").addEventListener("click", function () {
+      var nameEl = document.getElementById("newCatName");
+      var goalEl = document.getElementById("newCatGoal");
+      var name = nameEl.value.trim();
+      if (!name) return;
+      var goal = Math.max(0, parseFloat(goalEl.value) || 0);
+      var color = PALETTE[state.categories.length % PALETTE.length];
+      state.categories.push({ id: uid(), name: name, color: color, goal: goal });
+      save();
+      render();
+    });
 
     function updateSummary() {
       var draftTotal = 0;
@@ -436,6 +635,12 @@
         var val = Math.max(0, parseFloat(inp.value) || 0);
         var cat = state.categories.filter(function (c) { return c.id === catId; })[0];
         if (cat) cat.goal = val;
+      });
+      nameInputs.forEach(function (inp) {
+        var catId = inp.getAttribute("data-name");
+        var val = inp.value.trim();
+        var cat = state.categories.filter(function (c) { return c.id === catId; })[0];
+        if (cat && val) cat.name = val;
       });
       save();
       render();
